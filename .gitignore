@@ -14,3 +14,4 @@ TelosysTools/
 build/
 /auctions/
 /AukcjaSprzetuIT/
+*.output
