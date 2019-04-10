@@ -15,14 +15,16 @@ import java.nio.charset.Charset;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -60,6 +62,8 @@ public class WikiCommonsCrawler {
 	static List<String> logBuffer = Collections.synchronizedList(new LinkedList<>());
 	static List<String> contentBuffer = Collections.synchronizedList(new LinkedList<>());
 
+	static String categoryReceived;
+
 	static void log(String content) throws IOException {
 		logLock.readLock().lock();
 		logBuffer.add(content);
@@ -79,6 +83,8 @@ public class WikiCommonsCrawler {
 		int timeout = 30;
 		TimeUnit tu = TimeUnit.HOURS;
 		if (args != null && args.length > 0) {
+			rootCategory = args[0];
+			categoryReceived = rootCategory.replace(" ", "_");
 			if (args.length > 1) {
 				parallelism = Integer.parseInt(args[1]);
 				if (args.length > 2) {
@@ -94,7 +100,8 @@ public class WikiCommonsCrawler {
 		fjp = new ForkJoinPool(parallelism);
 		httpsPreparation();
 
-		ForkJoinTask<Void> forkJoinTask = fjp.submit(new CategoryRecursiveAction("Category:" + rootCategory)).fork();
+		ForkJoinTask<Void> forkJoinTask = fjp.submit(new CategoryRecursiveAction(rootCategory, new LinkedList<>()))
+				.fork();
 		Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(new WriterFlushRecursiveAction(), 60, 60,
 				TimeUnit.SECONDS);
 
@@ -106,19 +113,21 @@ public class WikiCommonsCrawler {
 
 	static class WriterFlushRecursiveAction implements Runnable {
 
-		static File logFile = new File("log" + System.currentTimeMillis() + ".output");
-		static File contentFile = new File("file" + System.currentTimeMillis() + ".output");
+		static File logFile = new File(categoryReceived + ".log");
+		static File contentFile = new File(categoryReceived + ".output");
 
 		@Override
 		public void run() {
 			try {
+				boolean empty = true;
 				System.out.println("flushing...");
 				try {
 					contentLock.writeLock().lock();
 					try (OutputStreamWriter lw = new OutputStreamWriter(new FileOutputStream(contentFile, true),
 							Charset.forName("UTF-8"))) {
 						for (String line : contentBuffer) {
-							lw.write(line + "\n");
+							empty = false;
+							lw.write(line);
 						}
 						contentBuffer.clear();
 					}
@@ -131,7 +140,8 @@ public class WikiCommonsCrawler {
 					try (OutputStreamWriter fw = new OutputStreamWriter(new FileOutputStream(logFile, true),
 							Charset.forName("UTF-8"))) {
 						for (String line : logBuffer) {
-							fw.write(line + "\n");
+							empty = false;
+							fw.write(line);
 						}
 						logBuffer.clear();
 					}
@@ -139,8 +149,12 @@ public class WikiCommonsCrawler {
 				} finally {
 					logLock.writeLock().unlock();
 				}
+				if(empty) {
+					System.out.println("Empty!!!");
+					throw new InterruptedException("Empty!!!");
+				}
 				System.out.println("flushed!");
-			} catch (IOException e) {
+			} catch (InterruptedException | IOException e) {
 				throw new RuntimeException(e);
 			}
 		}
@@ -152,9 +166,14 @@ public class WikiCommonsCrawler {
 
 		private final String category;
 
-		public CategoryRecursiveAction(String category) {
+		private Deque<String> categoryTree;
+
+		public CategoryRecursiveAction(String category, Deque<String> categoryTree) {
 			super();
 			this.category = category;
+			Deque<String> cats = new LinkedList<>(categoryTree);
+			cats.addFirst(category.replace("Category:", ""));
+			this.categoryTree = cats;
 		}
 
 		@Override
@@ -174,7 +193,8 @@ public class WikiCommonsCrawler {
 					Iterator<Object> iterator = jsonArray.iterator();
 					while (iterator.hasNext()) {
 						JSONObject arr = (JSONObject) iterator.next();
-						String content = arr.getString("title") + "@@@" + category.replace("Category:", "") + "\n";
+						String content = arr.getString("title")
+								+ this.categoryTree.stream().reduce("@", (s1, s2) -> s1 + '@' + s2) + "\n";
 						write(content);
 					}
 
@@ -198,7 +218,7 @@ public class WikiCommonsCrawler {
 					Set<String> subcats = new HashSet<>();
 					jsonArray.forEach(arr -> subcats.add(((JSONObject) arr).getString("title")));
 					for (String subc : subcats) {
-						ForkJoinTask<Void> submit = fjp.submit(new CategoryRecursiveAction(subc));
+						ForkJoinTask<Void> submit = fjp.submit(new CategoryRecursiveAction(subc, categoryTree));
 						submit.fork();
 					}
 
@@ -218,6 +238,9 @@ public class WikiCommonsCrawler {
 		private HttpURLConnection fireRequest(String category, String cmContinueToken, String type)
 				throws MalformedURLException, IOException, ProtocolException {
 			category = category.replace(" ", "_");
+			if (!category.startsWith("Category:")) {
+				category = "Category:" + category;
+			}
 			String address = BASE_ADDRESS;
 			address = address.replace($_CATEGORY_ID, category);
 			address = address.replace($_CM_TYPE, type);
