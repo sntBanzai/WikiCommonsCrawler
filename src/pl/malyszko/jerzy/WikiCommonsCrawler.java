@@ -52,8 +52,6 @@ public class WikiCommonsCrawler {
 	private static final String CATEGORYMEMBERS = "categorymembers";
 	private static final String BASE_ADDRESS = "https://commons.wikimedia.org/w/api.php?action=query&list=categorymembers&format=json&cmlimit=500&cmtype="
 			+ $_CM_TYPE + "&cmtitle=" + $_CATEGORY_ID;
-	private static final String LOCATION_COMMAND_LINK = "https://en.wikipedia.org/w/api.php?action=query&prop=info&pageids="
-			+ $_PAGE_ID + "&inprop=url&format=json";
 	private static final String CMCONTINUE = "cmcontinue";
 
 	static ForkJoinPool fjp;
@@ -98,7 +96,7 @@ public class WikiCommonsCrawler {
 		}
 
 		fjp = new ForkJoinPool(parallelism);
-		httpsPreparation();
+		HttpsPreparator.prepare();
 
 		ForkJoinTask<Void> forkJoinTask = fjp.submit(new CategoryRecursiveAction(rootCategory, new LinkedList<>()))
 				.fork();
@@ -268,40 +266,5 @@ public class WikiCommonsCrawler {
 
 	}
 
-	private static void httpsPreparation() throws NoSuchAlgorithmException, KeyManagementException {
-		TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
-			public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-				return null;
-			}
-
-			@Override
-			public void checkClientTrusted(java.security.cert.X509Certificate[] arg0, String arg1)
-					throws CertificateException {
-				// TODO Auto-generated method stub
-
-			}
-
-			@Override
-			public void checkServerTrusted(java.security.cert.X509Certificate[] arg0, String arg1)
-					throws CertificateException {
-				// TODO Auto-generated method stub
-
-			}
-
-		} };
-
-		SSLContext sc = SSLContext.getInstance("SSL");
-		sc.init(null, trustAllCerts, new java.security.SecureRandom());
-		HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-
-		// Create all-trusting host name verifier
-		HostnameVerifier allHostsValid = new HostnameVerifier() {
-			public boolean verify(String hostname, SSLSession session) {
-				return true;
-			}
-		};
-		// Install the all-trusting host verifier
-		HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
-	}
 
 }

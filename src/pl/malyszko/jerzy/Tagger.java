@@ -42,7 +42,7 @@ public class Tagger {
 
 	private static String normalize(String rawTag) {
 		String replace = rawTag.toLowerCase().trim().replace(",", "").replace(".", "").replace("(", "").replace(")",
-				"");
+				"").replace("\"", "");
 		if (replace.startsWith("-")) {
 			replace = replace.substring(1);
 		}
