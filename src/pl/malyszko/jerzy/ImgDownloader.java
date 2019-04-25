@@ -48,7 +48,6 @@ public class ImgDownloader {
 				} catch (Exception e) {
 					try {
 						System.err.println("Fejl " + URLDecoder.decode(arg, "UTF-8"));
-						e.printStackTrace(System.err);
 					} catch (UnsupportedEncodingException e1) {
 						// TODO Auto-generated catch block
 						e1.printStackTrace();
@@ -57,8 +56,7 @@ public class ImgDownloader {
 
 			}
 		};
-		Files.lines(Paths.get(sourceFile), Charset.forName("UTF-8")).limit(limit).map(line -> line.split("@")[0])
-				.parallel().forEach(imgLocationConsumer);
+		Files.lines(Paths.get(sourceFile), Charset.forName("UTF-8")).filter(str -> !str.endsWith("@-1")).limit(limit).map(line -> line.split("@")[0]).forEach(imgLocationConsumer);
 	}
 
 }
