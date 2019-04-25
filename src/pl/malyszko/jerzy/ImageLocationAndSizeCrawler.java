@@ -33,37 +33,42 @@ public class ImageLocationAndSizeCrawler {
 
 	public static void main(String... args) throws IOException {
 		File source = new File(args[0]);
+		int linesToSkip = 0;
+		if(args.length > 1) {
+			linesToSkip = Integer.valueOf(args[1]);
+		}
 		HttpsPreparator.prepare();
 		try (BufferedReader reader = Files.newBufferedReader(source.toPath(), Charset.forName("UTF-8"));
-				BufferedWriter writer = Files.newBufferedWriter(new File("output2.file").toPath(),
+				BufferedWriter writer = Files.newBufferedWriter(new File("output"+System.currentTimeMillis()+".file").toPath(),
 						Charset.forName("UTF-8"))) {
+			
 			String line = null;
 			Set<String> paintings = new HashSet<>();
-
 			while ((line = reader.readLine()) != null) {
+				if(linesToSkip > 0) {
+					linesToSkip--;
+					continue;
+				}
 				if (paintings.size() < 20) {
 					paintings.add(line.split("@@")[0]);
 					continue;
 				}
 				Map<String, Object[]> batchResult = dealWithSingleBatch(paintings.toArray(new String[0]));
-				long reductionResult = batchResult.values().stream().mapToLong(ind -> (long) ind[1]).reduce(0L,
+				long reductionResult = batchResult.values().stream().filter(obj -> obj != null).mapToLong(ind -> (long) ind[1]).reduce(0L,
 						(l1, l2) -> l1 + l2);
 				filesInKiloBytes = filesInKiloBytes.add(BigInteger.valueOf(reductionResult / 1024L));
-				batchResult.values().forEach(val -> {
+				batchResult.entrySet().forEach(val -> {
 					try {
-						writer.write(val[0] + "@" + val[1] + "\n");
+						if(val.getValue() == null) {
+							writer.write(val.getKey()+ "!!! Z O N K !!!");
+							return;
+						} 
+						writer.write(val.getValue()[0] + "@" + val.getValue()[1] + "\n");
 					} catch (IOException e) {
 						throw new RuntimeException(e);
 					}
 				});
-				batchResult.entrySet().stream().filter(ent -> ent.getValue() == null).map(ent -> ent.getKey())
-						.collect(Collectors.toSet()).forEach(str -> {
-							try {
-								writer.write("!!!" + str + "!!!\n");
-							} catch (IOException e) {
-								throw new RuntimeException(e);
-							}
-						});
+		
 				writer.flush();
 				paintings.clear();
 			}
